@@ -22,6 +22,7 @@ class Address {
   virtual ~Address() = 0;
 
   virtual std::string str() const = 0;
+
   virtual std::vector<char> bytes() const = 0;
 };
 

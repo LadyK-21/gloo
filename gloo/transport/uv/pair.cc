@@ -52,6 +52,11 @@ const Address& Pair::address() const {
   return addr_;
 }
 
+bool Pair::isConnected() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return state_ == CONNECTED;
+}
+
 void Pair::connect(const std::vector<char>& bytes) {
   const auto peer = Address(bytes);
 
@@ -320,7 +325,7 @@ void Pair::onNotifyRecvReady(const Op& op) {
   if (it != localPendingSend_.end()) {
     auto& queue = it->second;
     GLOO_ENFORCE(!queue.empty());
-    auto op = std::move(queue.front());
+    auto nextOp = std::move(queue.front());
 
     // Remove operation from queue, and potentially remove map entry
     // for this tag.
@@ -329,9 +334,9 @@ void Pair::onNotifyRecvReady(const Op& op) {
       localPendingSend_.erase(it);
     }
 
-    auto buf = NonOwningPtr<UnboundBuffer>(op.buf);
+    auto buf = NonOwningPtr<UnboundBuffer>(nextOp.buf);
     GLOO_ENFORCE(buf, "Cannot lock pointer to unbound buffer");
-    sendUnboundBuffer(tag, std::move(buf), op.offset, op.length);
+    sendUnboundBuffer(tag, std::move(buf), nextOp.offset, nextOp.length);
     return;
   }
 

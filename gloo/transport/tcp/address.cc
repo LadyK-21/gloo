@@ -9,8 +9,9 @@
 #include "gloo/transport/tcp/address.h"
 
 #include <arpa/inet.h>
-#include <mutex>
 #include <string.h>
+#include <memory>
+#include <mutex>
 
 #include "gloo/common/logging.h"
 

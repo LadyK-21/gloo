@@ -9,9 +9,11 @@
 #pragma once
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "gloo/common/error.h"
+#include "gloo/common/store.h"
 #include "gloo/context.h"
 #include "gloo/rendezvous/store.h"
 #include "gloo/transport/address.h"
@@ -27,13 +29,9 @@ class Context : public ::gloo::Context {
   Context(int rank, int size, int base = 2);
   virtual ~Context();
 
-  void connectFullMesh(
-      Store& store,
-      std::shared_ptr<transport::Device>& dev);
+  void connectFullMesh(Store& store, std::shared_ptr<transport::Device>& dev);
 
  protected:
-  std::vector<char> extractAddress(std::vector<char>& allAddrs, int i);
-
   friend class ContextFactory;
 };
 
@@ -45,7 +43,7 @@ class ContextFactory {
   explicit ContextFactory(std::shared_ptr<::gloo::Context> backingContext);
 
   std::shared_ptr<::gloo::Context> makeContext(
-    std::shared_ptr<transport::Device>& dev);
+      std::shared_ptr<transport::Device>& dev);
 
  protected:
   std::shared_ptr<::gloo::Context> backingContext_;
@@ -62,7 +60,6 @@ class ContextFactory {
   std::vector<int> sendNotificationData_;
   std::vector<std::unique_ptr<transport::Buffer>> sendNotificationBuffers_;
 };
-
 
 } // namespace rendezvous
 

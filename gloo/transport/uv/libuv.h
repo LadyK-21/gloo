@@ -19,6 +19,7 @@
 // * No way to pass externally managed memory to the read functions.
 //
 
+#include <stdio.h>
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -31,9 +32,8 @@
 #include <tuple>
 #include <utility>
 #include <vector>
-#include <stdio.h>
 
-#include <uv.h>
+#include <uv.h> // @manual
 
 #define UV_ASSERT(rv, prefix) \
   {                           \
@@ -65,7 +65,7 @@ struct BaseHandle {};
 struct BaseRequest {};
 
 // Event type for errors.
-struct ErrorEvent {
+class ErrorEvent {
  public:
   explicit ErrorEvent(int error) : error_(error) {}
 
@@ -326,7 +326,7 @@ class Resource : public Emitter<T>, public std::enable_shared_from_this<T> {
   std::shared_ptr<T> leak_;
 };
 
-struct CloseEvent {};
+class CloseEvent {};
 
 template <typename T, typename U>
 class Handle : public Resource<T, U>, public BaseHandle {
@@ -346,7 +346,7 @@ class Handle : public Resource<T, U>, public BaseHandle {
   }
 
   template <typename F, typename... Args>
-  typename std::result_of<F(Args...)>::type invoke(F&& f, Args&&... args) {
+  typename std::invoke_result<F, Args...>::type invoke(F&& f, Args&&... args) {
     return std::forward<F>(f)(std::forward<Args>(args)...);
   }
 
@@ -383,8 +383,8 @@ class Request : public Resource<T, U>, public BaseRequest {
   // assumption that it is unleaked when the callback gets called.
   template <typename F, typename... Args>
   typename std::enable_if<
-      !std::is_void<typename std::result_of<F(Args...)>::type>::value,
-      typename std::result_of<F(Args...)>::type>::type
+      !std::is_void<typename std::invoke_result<F, Args...>::type>::value,
+      typename std::invoke_result<F, Args...>::type>::type
   invoke(F&& f, Args&&... args) {
     auto err = std::forward<F>(f)(std::forward<Args>(args)...);
     if (err) {
@@ -440,11 +440,11 @@ class Timer : public Handle<Timer, uv_timer_t> {
   }
 };
 
-struct EndEvent {};
+class EndEvent {};
 
-struct ListenEvent {};
+class ListenEvent {};
 
-struct ConnectEvent {};
+class ConnectEvent {};
 
 class ReadEvent {
  public:
@@ -466,7 +466,7 @@ class ReadEvent {
   }
 };
 
-struct WriteEvent {};
+class WriteEvent {};
 
 namespace detail {
 
@@ -554,15 +554,11 @@ class TCP final : public Handle<TCP, uv_tcp_t> {
 
   static void uv__connection_cb(uv_stream_t* server, int status);
 
-  static void uv__alloc_cb(
-      uv_handle_t* handle,
-      size_t suggested_size,
-      uv_buf_t* buf);
+  static void
+  uv__alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
 
-  static void uv__read_cb(
-      uv_stream_t* stream,
-      ssize_t nread,
-      const uv_buf_t* buf);
+  static void
+  uv__read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf);
 
   static void uv__write_cb(uv_write_t* req, int status) {}
 
