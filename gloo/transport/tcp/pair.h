@@ -30,6 +30,8 @@
 #include "gloo/transport/pair.h"
 #include "gloo/transport/tcp/address.h"
 #include "gloo/transport/tcp/device.h"
+#include "gloo/transport/tcp/error.h"
+#include "gloo/transport/tcp/socket.h"
 
 namespace gloo {
 namespace transport {
@@ -83,7 +85,6 @@ class Pair : public ::gloo::transport::Pair, public Handler {
  protected:
   enum state {
     INITIALIZING = 1,
-    LISTENING = 2,
     CONNECTING = 3,
     CONNECTED = 4,
     CLOSED = 5,
@@ -94,7 +95,8 @@ class Pair : public ::gloo::transport::Pair, public Handler {
       Context* context,
       Device* device,
       int rank,
-      std::chrono::milliseconds timeout);
+      std::chrono::milliseconds timeout,
+      bool useRankAsSeqNumber = false);
 
   virtual ~Pair();
 
@@ -108,15 +110,11 @@ class Pair : public ::gloo::transport::Pair, public Handler {
 
   virtual void setSync(bool sync, bool busyPoll) override;
 
-  virtual std::unique_ptr<::gloo::transport::Buffer> createSendBuffer(
-      int slot,
-      void* ptr,
-      size_t size) override;
+  virtual std::unique_ptr<::gloo::transport::Buffer>
+  createSendBuffer(int slot, void* ptr, size_t size) override;
 
-  virtual std::unique_ptr<::gloo::transport::Buffer> createRecvBuffer(
-      int slot,
-      void* ptr,
-      size_t size) override;
+  virtual std::unique_ptr<::gloo::transport::Buffer>
+  createRecvBuffer(int slot, void* ptr, size_t size) override;
 
   // Send from the specified buffer to remote side of pair.
   virtual void send(
@@ -145,6 +143,8 @@ class Pair : public ::gloo::transport::Pair, public Handler {
 
   void close() override;
 
+  bool isConnected() override;
+
  protected:
   // Refer to parent context using raw pointer. This could be a
   // weak_ptr, seeing as the context class is a shared_ptr, but:
@@ -170,7 +170,6 @@ class Pair : public ::gloo::transport::Pair, public Handler {
 
   Address self_;
   Address peer_;
-  bool is_client_;
 
   std::mutex m_;
   std::condition_variable cv_;
@@ -191,8 +190,7 @@ class Pair : public ::gloo::transport::Pair, public Handler {
   void sendNotifyRecvReady(uint64_t slot, size_t nbytes);
   void sendNotifySendReady(uint64_t slot, size_t nbytes);
 
-  void listen();
-  void connect(const Address& peer);
+  void connectCallback(std::shared_ptr<Socket> socket, Error error);
 
   Buffer* getBuffer(int slot);
   void registerBuffer(Buffer* buf);
@@ -247,14 +245,14 @@ class Pair : public ::gloo::transport::Pair, public Handler {
   //
   virtual bool write(Op& op);
 
-  void writeComplete(const Op &op, NonOwningPtr<UnboundBuffer> &buf,
-                     const Op::Opcode &opcode) const;
+  void writeComplete(
+      const Op& op,
+      NonOwningPtr<UnboundBuffer>& buf,
+      const Op::Opcode& opcode) const;
 
   // Helper function for the `read` function below.
-  ssize_t prepareRead(
-      Op& op,
-      NonOwningPtr<UnboundBuffer>& buf,
-      struct iovec& iov);
+  ssize_t
+  prepareRead(Op& op, NonOwningPtr<UnboundBuffer>& buf, struct iovec& iov);
 
   // Read operation from socket into member variable (see `rx_`).
   //
@@ -262,7 +260,7 @@ class Pair : public ::gloo::transport::Pair, public Handler {
   //
   virtual bool read();
 
-  void readComplete(NonOwningPtr<UnboundBuffer> &buf);
+  void readComplete(NonOwningPtr<UnboundBuffer>& buf);
 
   // Helper function that is called from the `read` function.
   void handleRemotePendingSend(const Op& op);
@@ -277,28 +275,6 @@ class Pair : public ::gloo::transport::Pair, public Handler {
   //
   virtual void handleReadWrite(int events);
 
-  // Finishes connection setup if this side of the pair is on the
-  // listening side of connection initiation. This is called from
-  // `handleEvents` if the listening file descriptor is readable, i.e.
-  // if there is an incoming connection.
-  //
-  // The pair mutex is expected to be held when called.
-  //
-  void handleListening();
-
-  // Finishes connection setup if this side of the pair is on the
-  // connecting side of the connection initiation. This is called from
-  // `handleEvents` if the file descriptor associated with the
-  // connection is writable or in an error state, i.e. the connection
-  // has been established or failed to establish.
-  //
-  // The pair mutex is expected to be held when called.
-  //
-  void handleConnecting();
-
-  // Helper function called from `handleListening` or `handleConnecting`.
-  void handleConnected();
-
   // Advances this pair's state. See the `Pair::state` enum for
   // possible states. State can only move forward, i.e. from
   // initializing, to connected, to closed.
@@ -307,9 +283,9 @@ class Pair : public ::gloo::transport::Pair, public Handler {
   //
   virtual void changeState(state nextState) noexcept;
 
-  template<typename pred_t>
-  void waitUntil(pred_t pred, std::unique_lock<std::mutex>& lock,
-                 bool useTimeout) {
+  template <typename pred_t>
+  void
+  waitUntil(pred_t pred, std::unique_lock<std::mutex>& lock, bool useTimeout) {
     auto timeoutSet = timeout_ != kNoTimeout;
     if (useTimeout && timeoutSet) {
       // Use a longer timeout when waiting for initial connect
@@ -317,11 +293,13 @@ class Pair : public ::gloo::transport::Pair, public Handler {
       // relTime must be small enough not to overflow when
       // added to std::chrono::steady_clock::now()
       auto relTime = std::min(
-        timeout_ * 5,
-        std::chrono::duration_cast<std::chrono::milliseconds>(kLargeTimeDuration));
+          timeout_ * 5,
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+              kLargeTimeDuration));
       auto done = cv_.wait_for(lock, relTime, pred);
       if (!done) {
-        signalAndThrowException(GLOO_ERROR_MSG("Connect timeout ", peer_.str()));
+        signalAndThrowException(
+            GLOO_ERROR_MSG("Connect timeout ", peer_.str()));
       }
     } else {
       cv_.wait(lock, pred);
@@ -331,7 +309,8 @@ class Pair : public ::gloo::transport::Pair, public Handler {
   // Helper function to block execution until the pair has advanced to
   // the `CONNECTED` state. Expected to be called from `Pair::connect`.
   virtual void waitUntilConnected(
-      std::unique_lock<std::mutex>& lock, bool useTimeout);
+      std::unique_lock<std::mutex>& lock,
+      bool useTimeout);
 
   // Helper function to assert the current state is `CONNECTED`.
   virtual void verifyConnected();
@@ -346,8 +325,8 @@ class Pair : public ::gloo::transport::Pair, public Handler {
   void signalException(std::exception_ptr);
 
   // Like signalException, but throws exception as well.
-  void signalAndThrowException(const std::string& msg);
-  void signalAndThrowException(std::exception_ptr ex);
+  [[noreturn]] void signalAndThrowException(const std::string& msg);
+  [[noreturn]] void signalAndThrowException(std::exception_ptr ex);
 
   // Cache exception such that it can be rethrown if any function on
   // this instance is called again when it is in an error state.

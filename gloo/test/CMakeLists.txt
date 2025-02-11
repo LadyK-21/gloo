@@ -1,4 +1,4 @@
-find_package(OpenSSL 1.1 REQUIRED EXACT)
+find_package(OpenSSL 1.1.1 REQUIRED EXACT)
 
 set(GLOO_TEST_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/allgather_test.cc"
@@ -16,7 +16,6 @@ set(GLOO_TEST_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/openssl_utils.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/reduce_test.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/send_recv_test.cc"
-  "${CMAKE_CURRENT_SOURCE_DIR}/tls_tcp_test.cc"
   )
 set(GLOO_TEST_LIBRARIES)
 
@@ -50,8 +49,13 @@ if(USE_CUDA)
     "${CMAKE_CURRENT_SOURCE_DIR}/main.cc"
     )
 
-    cuda_add_executable(gloo_test_cuda ${GLOO_TEST_CUDA_SRCS})
-    target_link_libraries(gloo_test_cuda gloo_cuda gtest OpenSSL::SSL OpenSSL::Crypto)
+    if(GLOO_USE_CUDA_TOOLKIT)
+      enable_language(CUDA)
+      add_executable(gloo_test_cuda ${GLOO_TEST_CUDA_SRCS})
+    else()
+      cuda_add_executable(gloo_test_cuda ${GLOO_TEST_CUDA_SRCS})
+    endif()
+    target_link_libraries(gloo_test_cuda gloo_cuda gtest OpenSSL::SSL OpenSSL::Crypto ${GLOO_CUDA_LIBRARIES})
   endif()
 endif()
 

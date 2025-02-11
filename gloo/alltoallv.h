@@ -43,13 +43,13 @@ class AlltoallvOptions {
     setOutput(static_cast<void*>(ptr), std::move(elementsPerRank), sizeof(T));
   }
 
-  void setTag(uint32_t tag) {
-    this->tag = tag;
+  void setTag(uint32_t tag_2) {
+    this->tag = tag_2;
   }
 
-  void setTimeout(std::chrono::milliseconds timeout) {
-    GLOO_ENFORCE(timeout.count() > 0);
-    this->timeout = timeout;
+  void setTimeout(std::chrono::milliseconds timeout_2) {
+    GLOO_ENFORCE(timeout_2.count() > 0);
+    this->timeout = timeout_2;
   }
 
  protected:
@@ -88,8 +88,10 @@ class AlltoallvOptions {
       size_t elementSize);
 
   // Untemplated implementation of setOutput on opaque pointer.
-  void
-  setOutput(void* ptr, std::vector<int64_t> elementsPerRank, size_t elementSize);
+  void setOutput(
+      void* ptr,
+      std::vector<int64_t> elementsPerRank,
+      size_t elementSize);
 
   // End-to-end timeout for this operation.
   std::chrono::milliseconds timeout;

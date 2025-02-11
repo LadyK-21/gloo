@@ -16,7 +16,7 @@ namespace gloo {
 namespace test {
 namespace {
 
-const std::vector<Transport> kTransportsForMultiProcTest {
+const std::vector<Transport> kTransportsForMultiProcTest{
 #if GLOO_HAVE_TRANSPORT_TCP
     Transport::TCP,
 #endif
@@ -166,7 +166,6 @@ TEST_P(TransportMultiProcTest, IoTimeouts) {
 TEST_P(TransportMultiProcTest, UnboundIoErrors) {
   const auto processCount = std::get<0>(GetParam());
   const auto sleepMs = std::get<2>(GetParam());
-  const auto mode = std::get<3>(GetParam());
   const auto transport = std::get<4>(GetParam());
 
   spawnAsync(transport, processCount, [&](std::shared_ptr<Context> context) {
@@ -214,7 +213,6 @@ TEST_P(TransportMultiProcTest, UnboundIoErrors) {
 TEST_P(TransportMultiProcTest, UnboundIoTimeout) {
   const auto processCount = std::get<0>(GetParam());
   const auto sleepMs = std::get<2>(GetParam());
-  const auto mode = std::get<3>(GetParam());
   const auto transport = std::get<4>(GetParam());
 
   spawnAsync(transport, processCount, [&](std::shared_ptr<Context> context) {
@@ -266,7 +264,6 @@ TEST_P(TransportMultiProcTest, UnboundIoTimeout) {
 TEST_P(TransportMultiProcTest, UnboundIoTimeoutOverride) {
   const auto processCount = std::get<0>(GetParam());
   const auto sleepMs = std::get<2>(GetParam());
-  const auto mode = std::get<3>(GetParam());
   const auto transport = std::get<4>(GetParam());
 
   // Use lower timeout than default and pass directly to waitSend/waitRecv.

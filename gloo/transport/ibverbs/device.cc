@@ -13,7 +13,6 @@
 #include <string.h>
 
 #include <algorithm>
-#include <array>
 
 #include "gloo/common/error.h"
 #include "gloo/common/linux.h"
@@ -24,8 +23,6 @@
 namespace gloo {
 namespace transport {
 namespace ibverbs {
-
-static const std::chrono::seconds kTimeoutDefault = std::chrono::seconds(30);
 
 // Scope guard for ibverbs device list.
 class IbvDevices {
@@ -74,8 +71,7 @@ std::shared_ptr<::gloo::transport::Device> CreateDevice(
   // Default to using the first device if not specified
   if (attr.name.empty()) {
     if (devices.size() == 0) {
-      GLOO_THROW_INVALID_OPERATION_EXCEPTION(
-        "No ibverbs devices present");
+      GLOO_THROW_INVALID_OPERATION_EXCEPTION("No ibverbs devices present");
     }
     std::vector<std::string> names;
     for (auto i = 0; i < devices.size(); i++) {
@@ -169,8 +165,7 @@ bool Device::hasGPUDirect() const {
   return hasNvPeerMem_;
 }
 
-std::shared_ptr<transport::Context> Device::createContext(
-    int rank, int size) {
+std::shared_ptr<transport::Context> Device::createContext(int rank, int size) {
   return std::shared_ptr<transport::Context>(
       new ibverbs::Context(shared_from_this(), rank, size));
 }

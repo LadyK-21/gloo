@@ -40,6 +40,8 @@ option(USE_TCP_OPENSSL_LOAD "Build TCP-TLS transport with OpenSSL dynamically lo
 if(${USE_TCP_OPENSSL_LINK} AND ${USE_TCP_OPENSSL_LOAD})
   message(FATAL_ERROR "USE_TCP_OPENSSL_LINK and USE_TCP_OPENSSL_LOAD are mutually exclusive")
 endif()
+option(USE_CUDA "Build with CUDA support" OFF)
+option(GLOO_USE_CUDA_TOOLKIT "Build CUDA with FindCUDATookit.cmake and enable_language(CUDA)" OFF)
 
 if(MSVC)
   message(STATUS "MSVC detected")
@@ -51,9 +53,9 @@ if(MSVC)
   message(STATUS "Set USE_NCCL OFF")
   set(USE_RCCL OFF)
   message(STATUS "Set USE_RCCL OFF")
-  set(USE_LIBUV ON)
-  message(STATUS "Set USE_LIBUV ON")
-  message(STATUS "Only USE_LIBUV is supported on Windows")
+  set(USE_LIBUV OFF)
+  message(STATUS "Set USE_LIBUV OFF")
+  # message(STATUS "Only USE_LIBUV is supported on Windows")
 
   if(BUILD_BENCHMARK)
     message(FATAL_ERROR "BUILD_BENCHMARK is not supported on Windows yet")
@@ -115,7 +117,7 @@ include_directories(${PROJECT_BINARY_DIR})
 # Compiler flags
 
 if(NOT MSVC)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -fPIC")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -fPIC")
 endif()
 
 # Recurse into main project directory

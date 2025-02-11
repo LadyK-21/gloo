@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <random>
 
 #include "gloo/common/common.h"
 #include "gloo/common/logging.h"
@@ -24,7 +25,7 @@ class CudaLocalNativeReduce : public LocalOp<T> {
  public:
   CudaLocalNativeReduce(
       std::vector<CudaStream>& streams,
-      std::vector<CudaDevicePointer<T> >& devicePtrs,
+      std::vector<CudaDevicePointer<T>>& devicePtrs,
       Dst& targetPtr,
       const CudaReductionFunction<T>* fn,
       size_t offset,
@@ -51,7 +52,9 @@ class CudaLocalNativeReduce : public LocalOp<T> {
 
     // Shuffle order in an attempt to evenly spread work across devices when
     // dealing with multiple instances of this operation.
-    std::random_shuffle(indices_.begin(), indices_.end());
+    std::random_device rd;
+    std::mt19937 mt(rd());
+    std::shuffle(indices_.begin(), indices_.end(), mt);
 
     // Initialize
     CudaDeviceGuard guard;
@@ -65,8 +68,7 @@ class CudaLocalNativeReduce : public LocalOp<T> {
 
         // Number of elements must be equal
         GLOO_ENFORCE_EQ(
-            devicePtrs_[indexA].getCount(),
-            devicePtrs_[indexB].getCount());
+            devicePtrs_[indexA].getCount(), devicePtrs_[indexB].getCount());
 
         // Devices must be able to access each others memory
         int canAccessPeer = 0;
@@ -104,18 +106,14 @@ class CudaLocalNativeReduce : public LocalOp<T> {
 
         // Record event on secondary stream
         CUDA_CHECK(cudaSetDevice(devicePtrs_[indexB].getDeviceID()));
-        CUDA_CHECK(cudaEventRecord(
-                       streamB.getEvent(),
-                       streamB.getStream()));
+        CUDA_CHECK(cudaEventRecord(streamB.getEvent(), streamB.getStream()));
 
         // Make primary stream wait for secondary stream.
         // This ensures any operations on the source pointer
         // have finished before we start the reduction.
         CUDA_CHECK(cudaSetDevice(devicePtrs_[indexA].getDeviceID()));
-        CUDA_CHECK(cudaStreamWaitEvent(
-                       streamA.getStream(),
-                       streamB.getEvent(),
-                       0));
+        CUDA_CHECK(
+            cudaStreamWaitEvent(streamA.getStream(), streamB.getEvent(), 0));
 
         // Queue reduction
         fn_->call(
@@ -139,7 +137,7 @@ class CudaLocalNativeReduce : public LocalOp<T> {
 
  protected:
   std::vector<CudaStream>& streams_;
-  std::vector<CudaDevicePointer<T> > devicePtrs_;
+  std::vector<CudaDevicePointer<T>> devicePtrs_;
   Dst targetPtr_;
   const CudaReductionFunction<T>* fn_;
   const int numPtrs_;
@@ -153,7 +151,7 @@ class CudaLocalNativeBroadcast : public LocalOp<T> {
  public:
   CudaLocalNativeBroadcast(
       std::vector<CudaStream>& streams,
-      std::vector<CudaDevicePointer<T> >& devicePtrs,
+      std::vector<CudaDevicePointer<T>>& devicePtrs,
       Src& sourcePtr,
       size_t offset,
       size_t count)
@@ -183,8 +181,7 @@ class CudaLocalNativeBroadcast : public LocalOp<T> {
 
         // Number of elements must be equal
         GLOO_ENFORCE_EQ(
-            devicePtrs_[indexA].getCount(),
-            devicePtrs_[indexB].getCount());
+            devicePtrs_[indexA].getCount(), devicePtrs_[indexB].getCount());
 
         // Devices must be able to access each others memory
         int canAccessPeer = 0;
@@ -226,48 +223,35 @@ class CudaLocalNativeBroadcast : public LocalOp<T> {
         auto& streamB = streams_[indexB];
 
         // Record event on target stream
-        CUDA_CHECK(cudaSetDevice(
-                       devicePtrs_[indexB].getDeviceID()));
-        CUDA_CHECK(cudaEventRecord(
-                       streamB.getEvent(),
-                       streamB.getStream()));
+        CUDA_CHECK(cudaSetDevice(devicePtrs_[indexB].getDeviceID()));
+        CUDA_CHECK(cudaEventRecord(streamB.getEvent(), streamB.getStream()));
 
         // Make source stream wait on target stream.
         // This ensures any operations on the target pointer
         // have finished before we start the copy.
-        CUDA_CHECK(cudaSetDevice(
-                       devicePtrs_[indexA].getDeviceID()));
-        CUDA_CHECK(cudaStreamWaitEvent(
-                       streamA.getStream(),
-                       streamB.getEvent(),
-                       0));
+        CUDA_CHECK(cudaSetDevice(devicePtrs_[indexA].getDeviceID()));
+        CUDA_CHECK(
+            cudaStreamWaitEvent(streamA.getStream(), streamB.getEvent(), 0));
 
         // Execute copy and wait for it to complete on the target
         // stream. This ensures that in the next iteration of this
         // loop the target can be used as source while knowing the
         // previous copy has completed.
         CUDA_CHECK(cudaMemcpyAsync(
-                       *devicePtrs_[indexB],
-                       *devicePtrs_[indexA],
-                       count_ * sizeof(T),
-                       cudaMemcpyDeviceToDevice,
-                       streamA.getStream()));
-        CUDA_CHECK(cudaEventRecord(
-                       streamA.getEvent(),
-                       streamA.getStream()));
-        CUDA_CHECK(cudaSetDevice(
-                       devicePtrs_[indexB].getDeviceID()));
-        CUDA_CHECK(cudaStreamWaitEvent(
-                       streamB.getStream(),
-                       streamA.getEvent(),
-                       0));
+            *devicePtrs_[indexB],
+            *devicePtrs_[indexA],
+            count_ * sizeof(T),
+            cudaMemcpyDeviceToDevice,
+            streamA.getStream()));
+        CUDA_CHECK(cudaEventRecord(streamA.getEvent(), streamA.getStream()));
+        CUDA_CHECK(cudaSetDevice(devicePtrs_[indexB].getDeviceID()));
+        CUDA_CHECK(
+            cudaStreamWaitEvent(streamB.getStream(), streamA.getEvent(), 0));
 
         // Emit event on the target stream so we can wait on all
         // events in the wait() function. Otherwise waiting on
         // this event would NOT indicate completion.
-        CUDA_CHECK(cudaEventRecord(
-                       streamB.getEvent(),
-                       streamB.getStream()));
+        CUDA_CHECK(cudaEventRecord(streamB.getEvent(), streamB.getStream()));
       }
     }
   }
@@ -282,7 +266,7 @@ class CudaLocalNativeBroadcast : public LocalOp<T> {
 
  protected:
   std::vector<CudaStream>& streams_;
-  std::vector<CudaDevicePointer<T> > devicePtrs_;
+  std::vector<CudaDevicePointer<T>> devicePtrs_;
   Src sourcePtr_;
   const int count_;
   const int numPtrs_;

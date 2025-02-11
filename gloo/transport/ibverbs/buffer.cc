@@ -10,7 +10,6 @@
 
 #include <errno.h>
 #include <string.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 #include <iostream>
@@ -39,21 +38,21 @@ Buffer::Buffer(Pair* pair, int slot, void* ptr, size_t size)
   if (mr_ == nullptr && errno == EFAULT) {
     if (!pair->dev_->hasNvPeerMem_) {
       GLOO_ENFORCE(
-        mr_ != nullptr,
-        "ibv_reg_mr: ",
-        strerror(errno),
-        " (kernel module 'nv_peer_mem' not loaded;"
-        " did you specify a pointer to GPU memory?)");
+          mr_ != nullptr,
+          "ibv_reg_mr: ",
+          strerror(errno),
+          " (kernel module 'nv_peer_mem' not loaded;"
+          " did you specify a pointer to GPU memory?)");
     }
   }
 
   // Provide hint if the error is ENOMEM
   if (mr_ == nullptr && errno == ENOMEM) {
     GLOO_ENFORCE(
-      mr_ != nullptr,
-      "ibv_reg_mr: ",
-      strerror(errno),
-      " (did you run into the locked memory limit?)");
+        mr_ != nullptr,
+        "ibv_reg_mr: ",
+        strerror(errno),
+        " (did you run into the locked memory limit?)");
   }
 
   GLOO_ENFORCE(mr_ != nullptr, "ibv_reg_mr: ", strerror(errno));
@@ -80,7 +79,7 @@ void Buffer::waitRecv() {
       if (timeout != kNoTimeout &&
           (std::chrono::steady_clock::now() - start) >= timeout) {
         pair_->signalIoFailure(
-          GLOO_ERROR_MSG("Read timeout ", pair_->peer().str()));
+            GLOO_ERROR_MSG("Read timeout ", pair_->peer().str()));
         GLOO_ENFORCE(false, "Unexpected code path");
       }
     }
@@ -88,7 +87,7 @@ void Buffer::waitRecv() {
   } else {
     // The device thread will signal completion. If the completion
     // hasn't arrived yet, wait until it does.
-    auto pred = [&]{
+    auto pred = [&] {
       checkErrorState();
       return recvCompletions_ > 0;
     };
@@ -104,7 +103,7 @@ void Buffer::waitRecv() {
         // reacquire.
         lock.unlock();
         pair_->signalIoFailure(
-          GLOO_ERROR_MSG("Read timeout ", pair_->peer().str()));
+            GLOO_ERROR_MSG("Read timeout ", pair_->peer().str()));
         GLOO_ENFORCE(false, "Unexpected code path");
       }
     }
@@ -130,7 +129,7 @@ void Buffer::waitSend() {
         if (timeout != kNoTimeout &&
             (std::chrono::steady_clock::now() - start) >= timeout) {
           pair_->signalIoFailure(
-            GLOO_ERROR_MSG("Send timeout ", pair_->peer().str()));
+              GLOO_ERROR_MSG("Send timeout ", pair_->peer().str()));
           GLOO_ENFORCE(false, "Unexpected code path");
         }
       }
@@ -143,7 +142,7 @@ void Buffer::waitSend() {
     checkErrorState();
     if (sendCompletions_ == 0) {
       GLOO_ENFORCE_GT(sendPending_, 0, "No send to wait for");
-      auto pred = [&]{
+      auto pred = [&] {
         checkErrorState();
         return sendCompletions_ > 0;
       };
@@ -158,7 +157,7 @@ void Buffer::waitSend() {
           // reacquire.
           lock.unlock();
           pair_->signalIoFailure(
-            GLOO_ERROR_MSG("Send timeout ", pair_->peer().str()));
+              GLOO_ERROR_MSG("Send timeout ", pair_->peer().str()));
           GLOO_ENFORCE(false, "Unexpected code path");
         }
       }
@@ -168,8 +167,6 @@ void Buffer::waitSend() {
 }
 
 void Buffer::send(size_t offset, size_t length, size_t roffset) {
-  int rv;
-
   // Can't assert on roffset, since we don't know the size of
   // the remote buffer. Refactor of initialization code needed
   // to support this.
